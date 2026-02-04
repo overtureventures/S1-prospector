@@ -46,12 +46,13 @@ def write_to_csv(investors: List[Dict], filename: str):
     
     filepath = f"/home/claude/{filename}"
     
-    with open(filepath, 'w', newline='', encoding='utf-8') as f:
+# Write to current directory (works in any environment)
+    with open(filename, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=columns, extrasaction='ignore')
         writer.writeheader()
         writer.writerows(investors)
     
-    logger.info(f"Wrote {len(investors)} investors to {filepath}")
+    logger.info(f"Wrote {len(investors)} investors to {filename}")
     
     # Also copy to outputs for user access
     output_path = f"/mnt/user-data/outputs/{filename}"
