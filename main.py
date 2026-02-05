@@ -57,9 +57,17 @@ def main():
     output_method = os.getenv('OUTPUT_METHOD', 'csv')
     
     # Initialize Affinity client
-    affinity_api_key = os.getenv('AFFINITY_API_KEY')
-    logger.info(f"AFFINITY_API_KEY present: {bool(affinity_api_key)}")
-    logger.info(f"AFFINITY_API_KEY length: {len(affinity_api_key) if affinity_api_key else 0}")
+    # Try both variable names
+    affinity_api_key = os.getenv('AFFINITY_API_KEY') or os.getenv('AFFINITY_KEY')
+    
+    # Debug: log all env vars that contain AFFINITY
+    for key, value in os.environ.items():
+        if 'AFFINITY' in key.upper():
+            logger.info(f"Found env var: {key} = {value[:10]}... (length: {len(value)})")
+    
+    logger.info(f"AFFINITY_API_KEY present: {bool(os.getenv('AFFINITY_API_KEY'))}")
+    logger.info(f"AFFINITY_KEY present: {bool(os.getenv('AFFINITY_KEY'))}")
+    logger.info(f"Final key length: {len(affinity_api_key) if affinity_api_key else 0}")
     
     if not affinity_api_key:
         logger.warning("No Affinity API key found - CRM matching will be skipped")
