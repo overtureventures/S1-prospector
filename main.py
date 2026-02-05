@@ -56,28 +56,23 @@ def main():
     days_back = int(os.getenv('DAYS_BACK', 7))
     output_method = os.getenv('OUTPUT_METHOD', 'csv')
     
-    # Initialize Affinity client
-    # Try both variable names
-    affinity_api_key = os.getenv('AFFINITY_API_KEY') or os.getenv('AFFINITY_KEY')
-    
-    # Debug: log all env vars that contain AFFINITY
-    for key, value in os.environ.items():
-        if 'AFFINITY' in key.upper():
-            logger.info(f"Found env var: {key} = {value[:10]}... (length: {len(value)})")
-    
-    logger.info(f"AFFINITY_API_KEY present: {bool(os.getenv('AFFINITY_API_KEY'))}")
-    logger.info(f"AFFINITY_KEY present: {bool(os.getenv('AFFINITY_KEY'))}")
-    logger.info(f"Final key length: {len(affinity_api_key) if affinity_api_key else 0}")
+    # Initialize Affinity client - hardcoded key for testing
+    affinity_api_key = "jl3V-JfpGnQPj51Ae6R9SfoUK2aj-N8EvD20QAkeEIA"
+    logger.info(f"AFFINITY_API_KEY length: {len(affinity_api_key)}")
     
     if not affinity_api_key:
         logger.warning("No Affinity API key found - CRM matching will be skipped")
         affinity = None
     else:
         logger.info("Initializing Affinity client...")
-        affinity = AffinityClient(affinity_api_key)
-        list_name = os.getenv('AFFINITY_LIST_NAME', 'Fundraising')
-        logger.info(f"Loading Affinity list: {list_name}")
-        affinity.load_fundraising_list(list_name)
+        try:
+            affinity = AffinityClient(affinity_api_key)
+            list_name = os.getenv('AFFINITY_LIST_NAME', 'Fundraising')
+            logger.info(f"Loading Affinity list: {list_name}")
+            affinity.load_fundraising_list(list_name)
+        except Exception as e:
+            logger.error(f"Failed to initialize Affinity client: {e}")
+            affinity = None
     
     # Step 1: Get recent S-1 filings
     logger.info(f"Fetching S-1 filings from the last {days_back} days")
