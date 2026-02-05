@@ -45,8 +45,6 @@ def classify_entity(name: str) -> str:
 
 def generate_linkedin_search_url(name: str) -> str:
     """Generate a LinkedIn search URL for the entity."""
-    # Basic search URL - will work without Sales Navigator
-    # For Sales Nav, user can modify the base URL
     encoded_name = name.replace(' ', '%20')
     return f"https://www.linkedin.com/search/results/companies/?keywords={encoded_name}"
 
@@ -56,16 +54,22 @@ def main():
     
     # Configuration
     days_back = int(os.getenv('DAYS_BACK', 7))
-    output_method = os.getenv('OUTPUT_METHOD', 'csv')  # 'csv' or 'sheets'
+    output_method = os.getenv('OUTPUT_METHOD', 'csv')
     
     # Initialize Affinity client
     affinity_api_key = os.getenv('AFFINITY_API_KEY')
+    logger.info(f"AFFINITY_API_KEY present: {bool(affinity_api_key)}")
+    logger.info(f"AFFINITY_API_KEY length: {len(affinity_api_key) if affinity_api_key else 0}")
+    
     if not affinity_api_key:
         logger.warning("No Affinity API key found - CRM matching will be skipped")
         affinity = None
     else:
+        logger.info("Initializing Affinity client...")
         affinity = AffinityClient(affinity_api_key)
-        affinity.load_fundraising_list(os.getenv('AFFINITY_LIST_NAME', 'Fundraising'))
+        list_name = os.getenv('AFFINITY_LIST_NAME', 'Fundraising')
+        logger.info(f"Loading Affinity list: {list_name}")
+        affinity.load_fundraising_list(list_name)
     
     # Step 1: Get recent S-1 filings
     logger.info(f"Fetching S-1 filings from the last {days_back} days")
