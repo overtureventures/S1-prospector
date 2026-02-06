@@ -125,6 +125,17 @@ def main():
                 investor['crm_last_activity'] = match.get('last_activity', '')
                 investor['crm_notes'] = match.get('notes', '')
     
+    # ============================================
+    # PRINT FULL INVESTOR LIST TO LOGS
+    # ============================================
+    logger.info("=" * 60)
+    logger.info("FULL INVESTOR LIST")
+    logger.info("=" * 60)
+    for i, inv in enumerate(all_investors, 1):
+        pct = f" ({inv['ownership_pct']}%)" if inv['ownership_pct'] else ""
+        logger.info(f"{i}. {inv['investor_name']}{pct} | {inv['company_ipo']} | {inv['entity_type']}")
+    logger.info("=" * 60)
+    
     # Step 5: Output results
     timestamp = datetime.now().strftime('%Y-%m-%d')
     
