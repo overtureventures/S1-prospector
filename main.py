@@ -1,7 +1,7 @@
 """
 S-1 Prospector - Simplified Version
 Scans SEC EDGAR for recent S-1 filings, extracts investor data,
-enriches with foundation 990s, and outputs to CSV/Google Sheets.
+enriches with foundation 990s, and outputs to console/CSV.
 """
 
 import os
@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 from edgar import get_recent_s1_filings, parse_stockholders
 from propublica import lookup_foundation_officers
-from output import write_to_google_sheet, write_to_csv
+from output import write_to_csv
 
 # Configure logging
 logging.basicConfig(
@@ -47,6 +47,77 @@ def generate_linkedin_search_url(name: str) -> str:
     return f"https://www.linkedin.com/search/results/companies/?keywords={encoded_name}"
 
 
+def print_results_to_console(investors, run_date):
+    """
+    Print investor results in a copyable format to Railway logs.
+    """
+    print("\n\n")
+    print("=" * 100)
+    print("📋 WEEKLY S-1 INVESTOR REPORT - " + run_date)
+    print("=" * 100)
+    print()
+    
+    if not investors:
+        print("   No investors found this week.")
+        print("=" * 100)
+        return
+    
+    # Group by company
+    by_company = {}
+    for inv in investors:
+        company = inv['company_ipo']
+        if company not in by_company:
+            by_company[company] = []
+        by_company[company].append(inv)
+    
+    # Print by company
+    for company, company_investors in by_company.items():
+        print(f"\n{'─' * 100}")
+        print(f"🏢  {company.upper()}")
+        print(f"{'─' * 100}")
+        print(f"Filing Date: {company_investors[0]['filing_date']}")
+        print(f"Total Investors Found: {len(company_investors)}\n")
+        
+        for i, inv in enumerate(company_investors, 1):
+            print(f"{i}. {inv['investor_name']}")
+            print(f"   └─ Type: {inv['entity_type'].replace('_', ' ').title()}")
+            
+            details = []
+            if inv['ownership_pct']:
+                details.append(f"Ownership: {inv['ownership_pct']}%")
+            if inv['shares']:
+                details.append(f"Shares: {inv['shares']}")
+            if details:
+                print(f"   └─ {' | '.join(details)}")
+            
+            if inv['foundation_contacts']:
+                print(f"   └─ Foundation Contacts: {inv['foundation_contacts']}")
+            
+            print(f"   └─ LinkedIn: {inv['linkedin_search_url']}")
+            print()
+    
+    # Summary stats
+    print("\n" + "=" * 100)
+    print("📊 WEEKLY SUMMARY")
+    print("=" * 100)
+    print(f"\nTotal IPO Filings: {len(by_company)}")
+    print(f"Total Investors Identified: {len(investors)}\n")
+    
+    print("Breakdown by Entity Type:")
+    entity_counts = {}
+    for inv in investors:
+        entity_type = inv['entity_type']
+        entity_counts[entity_type] = entity_counts.get(entity_type, 0) + 1
+    
+    for entity_type, count in sorted(entity_counts.items(), key=lambda x: x[1], reverse=True):
+        print(f"   • {entity_type.replace('_', ' ').title()}: {count}")
+    
+    print("\n" + "=" * 100)
+    print("✅ COPY THE ABOVE RESULTS AND SHARE WITH YOUR TEAM")
+    print("=" * 100)
+    print("\n\n")
+
+
 def main():
     logger.info("=" * 60)
     logger.info("Starting S-1 Prospector Weekly Run")
@@ -54,7 +125,6 @@ def main():
     
     # Configuration
     days_back = int(os.getenv('DAYS_BACK', 7))
-    output_method = os.getenv('OUTPUT_METHOD', 'csv')
     enrich_foundations = os.getenv('ENRICH_FOUNDATIONS', 'true').lower() == 'true'
     
     # Step 1: Get recent S-1 filings
@@ -90,7 +160,7 @@ def main():
                     'ownership_pct': stockholder.get('ownership_pct', ''),
                     'shares': stockholder.get('shares', ''),
                     'entity_type': classify_entity(stockholder['name']),
-                    'in_crm': False,  # Skipping CRM matching for now
+                    'in_crm': False,
                     'crm_status': '',
                     'crm_last_activity': '',
                     'crm_notes': '',
@@ -140,36 +210,19 @@ def main():
     else:
         logger.info(f"\n⏭️  STEP 3: Foundation enrichment disabled")
     
-    # Step 4: Output results
-    logger.info(f"\n💾 STEP 4: Saving results...")
+    # Step 4: Save CSV backup
     timestamp = datetime.now().strftime('%Y-%m-%d')
+    logger.info(f"\n💾 STEP 4: Saving CSV backup...")
+    filename = f"s1_investors_{timestamp}.csv"
+    write_to_csv(all_investors, filename)
+    logger.info(f"✓ Saved to {filename}")
     
-    if output_method == 'sheets':
-        sheet_id = os.getenv('GOOGLE_SHEET_ID')
-        if sheet_id:
-            logger.info(f"Writing to Google Sheets (ID: {sheet_id})")
-            try:
-                write_to_google_sheet(all_investors, sheet_id, timestamp)
-                logger.info("✓ Successfully wrote to Google Sheets")
-            except Exception as e:
-                logger.error(f"❌ Error writing to Google Sheets: {e}")
-                logger.info("Falling back to CSV...")
-                filename = f"s1_investors_{timestamp}.csv"
-                write_to_csv(all_investors, filename)
-                logger.info(f"✓ Saved to {filename}")
-        else:
-            logger.warning("No GOOGLE_SHEET_ID configured, falling back to CSV")
-            filename = f"s1_investors_{timestamp}.csv"
-            write_to_csv(all_investors, filename)
-            logger.info(f"✓ Saved to {filename}")
-    else:
-        filename = f"s1_investors_{timestamp}.csv"
-        write_to_csv(all_investors, filename)
-        logger.info(f"✓ Saved to {filename}")
+    # Step 5: Print results to console for easy copying
+    print_results_to_console(all_investors, timestamp)
     
     # Final Summary
     logger.info("\n" + "=" * 60)
-    logger.info("📈 RUN SUMMARY")
+    logger.info("📈 RUN COMPLETE")
     logger.info("=" * 60)
     logger.info(f"S-1 Filings Processed: {len(filings)}")
     logger.info(f"Total Investors Found: {len(all_investors)}")
