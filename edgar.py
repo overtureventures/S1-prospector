@@ -211,6 +211,24 @@ def is_valid_investor_name(name: str) -> bool:
     if name == name_upper and len(words) > 4:
         return False
     
+    # Exact matches to reject
+    exact_rejects = [
+        'directors and executive officers',
+        'executive officers and directors', 
+        'principal shareholders',
+        'common stock',
+        'class a common stock',
+        'class b common stock',
+        'preferred stock',
+    ]
+    # Check with percentage stripped
+    name_no_pct = re.sub(r'\s*\([\d\.]+%\)\s*', '', name_lower).strip()
+    name_no_pct = re.sub(r'\s*\(more than \d+%\).*', '', name_no_pct).strip()
+    name_no_pct = name_no_pct.rstrip(':')
+    
+    if name_no_pct in exact_rejects:
+        return False
+    
     # Section headers to filter out (case-insensitive)
     section_headers = [
         'use of proceeds', 'plan of distribution', 'risk factors',
@@ -236,6 +254,8 @@ def is_valid_investor_name(name: str) -> bool:
         'critical accounting', 'recent developments', 'industry',
         'competition', 'intellectual property', 'government regulation',
         'employees', 'facilities', 'legal proceedings',
+        'principal shareholders', 'more than 5%', 'class a', 'class b',
+        'common stock', 'preferred stock', 'series a', 'series b',
     ]
     
     for header in section_headers:
@@ -249,6 +269,7 @@ def is_valid_investor_name(name: str) -> bool:
         'officers and directors as a group', 'executive officers and directors',
         'item', 'part', 'section', 'article', 'exhibit', 'schedule',
         'index', 'table', 'summary', 'overview', 'introduction',
+        'directors and', 'executive officers',
     ]
     for start in bad_starts:
         if name_lower.startswith(start):
@@ -281,6 +302,7 @@ def is_valid_investor_name(name: str) -> bool:
         'management', 'advisors', 'investment', 'equity', 'group',
         'foundation', 'endowment', 'family', 'associates', 'asset',
         'securities', 'limited', 'ltd', 'company', 'co.', ' gp',
+        'partnership',
     ]
     
     # Check if it looks like an entity
