@@ -210,15 +210,15 @@ def main():
     else:
         logger.info(f"\n⏭️  STEP 3: Foundation enrichment disabled")
     
-    # Step 4: Save CSV backup
+    # Step 4: Print results to console FIRST (before CSV)
     timestamp = datetime.now().strftime('%Y-%m-%d')
-    logger.info(f"\n💾 STEP 4: Saving CSV backup...")
+    print_results_to_console(all_investors, timestamp)
+    
+    # Step 5: Save CSV backup
+    logger.info(f"\n💾 STEP 5: Saving CSV backup...")
     filename = f"s1_investors_{timestamp}.csv"
     write_to_csv(all_investors, filename)
     logger.info(f"✓ Saved to {filename}")
-    
-    # Step 5: Print results to console for easy copying
-    print_results_to_console(all_investors, timestamp)
     
     # Final Summary
     logger.info("\n" + "=" * 60)
@@ -229,6 +229,8 @@ def main():
     logger.info(f"Foundations: {sum(1 for i in all_investors if i['entity_type'] == 'foundation')}")
     logger.info(f"Family Offices: {sum(1 for i in all_investors if i['entity_type'] == 'family_office')}")
     logger.info(f"Funds: {sum(1 for i in all_investors if i['entity_type'] == 'fund')}")
+    logger.info("=" * 60)
+    logger.info("\n🎯 Check the formatted report above to copy/paste to your team!")
     logger.info("=" * 60)
     
     return all_investors
