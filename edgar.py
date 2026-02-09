@@ -194,6 +194,93 @@ def parse_stockholders(filing: Dict) -> List[Dict]:
     return stockholders
 
 
+def is_valid_investor_name(name: str) -> bool:
+    """
+    Check if a string looks like a valid investor name vs a section header.
+    Returns True if it looks like a real investor name.
+    """
+    name_lower = name.lower().strip()
+    
+    # Skip if too short or too long
+    if len(name) < 3 or len(name) > 200:
+        return False
+    
+    # Section headers to filter out (case-insensitive)
+    section_headers = [
+        'use of proceeds', 'plan of distribution', 'risk factors',
+        'legal matters', 'experts', 'underwriting', 'indemnification',
+        'available information', 'financial statements', 'part i',
+        'part ii', 'item ', 'where you can find', 'material u.s.',
+        'certain relationships', 'related transactions', 'description of',
+        'dilution', 'capitalization', 'management', 'executive compensation',
+        'security ownership', 'principal stockholders', 'selling stockholders',
+        'shares eligible', 'tax considerations', 'erisa considerations',
+        'validity of', 'legal proceedings', 'market for', 'dividend policy',
+        'selected financial', 'business', 'properties', 'directors',
+        'table of contents', 'prospectus summary', 'the offering',
+        'corporate governance', 'related party', 'beneficial owner',
+        '5% or greater', 'information not required', 'limitation on',
+        'release of funds', 'nasdaq', 'nyse', 'trading symbol',
+    ]
+    
+    for header in section_headers:
+        if header in name_lower:
+            return False
+    
+    # Skip if starts with common non-name patterns
+    bad_starts = [
+        'name', 'total', '(', '_', '*', '-', '—', 'note', 'see ',
+        'the ', 'our ', 'we ', 'an ', 'a ', 'all executive', 'all directors',
+        'officers and directors as a group', 'executive officers and directors',
+    ]
+    for start in bad_starts:
+        if name_lower.startswith(start):
+            # Exception: "All executive officers..." with share data is valid
+            if 'as a group' in name_lower and any(c.isdigit() for c in name):
+                return True
+            return False
+    
+    # Skip if it's just numbers or special characters
+    if re.match(r'^[\d\s\.\,\%\$\(\)\-]+$', name):
+        return False
+    
+    # Skip if it looks like a footnote
+    if re.match(r'^\(\d+\)', name) or re.match(r'^\*+', name):
+        return False
+    
+    # Valid investor names usually contain:
+    # - Person names (capitalized words)
+    # - Entity names (LLC, LP, Inc, Corp, Fund, Capital, Partners, Trust, etc.)
+    entity_indicators = [
+        'llc', 'llp', 'l.l.c', 'l.p.', 'lp', 'inc', 'corp', 'corporation',
+        'fund', 'capital', 'partners', 'venture', 'trust', 'holdings',
+        'management', 'advisors', 'investment', 'equity', 'group',
+        'foundation', 'endowment', 'family', 'associates', 'asset',
+        'securities', 'limited', 'ltd', 'company', 'co.', 'gp',
+    ]
+    
+    # Check if it looks like an entity
+    has_entity_indicator = any(ind in name_lower for ind in entity_indicators)
+    
+    # Check if it looks like a person name (2-4 capitalized words)
+    words = name.split()
+    capitalized_words = sum(1 for w in words if w and w[0].isupper())
+    looks_like_person = 2 <= len(words) <= 6 and capitalized_words >= 2
+    
+    # Check if it has credentials (Ph.D., M.D., M.B.A., etc.) - indicates a person
+    has_credentials = bool(re.search(r'\b(Ph\.?D|M\.?D|M\.?B\.?A|J\.?D|CPA|CFA)\b', name, re.I))
+    
+    # Must look like either an entity or a person
+    if has_entity_indicator or looks_like_person or has_credentials:
+        return True
+    
+    # If it has ownership percentage in the name, probably valid
+    if re.search(r'\d+\.?\d*%', name):
+        return True
+    
+    return False
+
+
 def extract_stockholder_table(soup: BeautifulSoup) -> List[Dict]:
     """
     Extract stockholder information from the parsed S-1 document.
@@ -214,9 +301,6 @@ def extract_stockholder_table(soup: BeautifulSoup) -> List[Dict]:
         r'selling\s+stockholders',
         r'principal\s+shareholders'
     ]
-    
-    # Get all text content to search for section headers
-    text_content = soup.get_text()
     
     # Find tables that might contain stockholder data
     tables = soup.find_all('table')
@@ -263,26 +347,23 @@ def extract_stockholder_table(soup: BeautifulSoup) -> List[Dict]:
                         
                         # Clean up the name
                         name = re.sub(r'\s+', ' ', name_cell)
-                        name = re.sub(r'\(\d+\)', '', name)  # Remove footnote references
+                        name = re.sub(r'\(\d+\)', '', name)  # Remove footnote references like (1), (2)
+                        name = re.sub(r'\([a-z]\)', '', name, flags=re.I)  # Remove (a), (b), etc.
                         name = name.strip()
                         
-                        # Skip empty names, headers, or footnotes
-                        if not name or len(name) < 3:
-                            continue
-                        if name.lower().startswith(('name', 'total', '(', '_', '*')):
-                            continue
-                        if 'directors and officers' in name.lower():
+                        # Validate that this looks like a real investor name
+                        if not is_valid_investor_name(name):
                             continue
                         
                         stockholder = {'name': name}
                         
-                        # Try to extract shares and percentage
+                        # Try to extract shares and percentage from other cells
                         for cell in cells[1:]:
                             cell_text = cell.get_text().strip()
                             
                             # Look for percentage
                             pct_match = re.search(r'(\d+\.?\d*)%', cell_text)
-                            if pct_match:
+                            if pct_match and 'ownership_pct' not in stockholder:
                                 stockholder['ownership_pct'] = pct_match.group(1)
                             
                             # Look for share count
