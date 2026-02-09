@@ -200,9 +200,15 @@ def is_valid_investor_name(name: str) -> bool:
     Returns True if it looks like a real investor name.
     """
     name_lower = name.lower().strip()
+    name_upper = name.upper().strip()
     
     # Skip if too short or too long
-    if len(name) < 3 or len(name) > 200:
+    if len(name) < 3 or len(name) > 150:
+        return False
+    
+    # If entire name is uppercase and more than 3 words, likely a section header
+    words = name.split()
+    if name == name_upper and len(words) > 4:
         return False
     
     # Section headers to filter out (case-insensitive)
@@ -212,15 +218,24 @@ def is_valid_investor_name(name: str) -> bool:
         'available information', 'financial statements', 'part i',
         'part ii', 'item ', 'where you can find', 'material u.s.',
         'certain relationships', 'related transactions', 'description of',
-        'dilution', 'capitalization', 'management', 'executive compensation',
+        'dilution', 'capitalization', 'executive compensation',
         'security ownership', 'principal stockholders', 'selling stockholders',
         'shares eligible', 'tax considerations', 'erisa considerations',
         'validity of', 'legal proceedings', 'market for', 'dividend policy',
-        'selected financial', 'business', 'properties', 'directors',
+        'selected financial', 'properties', 'directors and officers',
         'table of contents', 'prospectus summary', 'the offering',
         'corporate governance', 'related party', 'beneficial owner',
         '5% or greater', 'information not required', 'limitation on',
         'release of funds', 'nasdaq', 'nyse', 'trading symbol',
+        'disclosure of', 'commission position', 'index to', 'changes in',
+        'disagreements with', 'accountants on', 'accounting and',
+        'federal tax', 'non-u.s. holders', 'securities act',
+        'forward-looking', 'summary of', 'overview', 'background',
+        'how to', 'what is', 'why we', 'our business', 'our company',
+        'financial condition', 'results of operations', 'liquidity',
+        'critical accounting', 'recent developments', 'industry',
+        'competition', 'intellectual property', 'government regulation',
+        'employees', 'facilities', 'legal proceedings',
     ]
     
     for header in section_headers:
@@ -232,6 +247,8 @@ def is_valid_investor_name(name: str) -> bool:
         'name', 'total', '(', '_', '*', '-', '—', 'note', 'see ',
         'the ', 'our ', 'we ', 'an ', 'a ', 'all executive', 'all directors',
         'officers and directors as a group', 'executive officers and directors',
+        'item', 'part', 'section', 'article', 'exhibit', 'schedule',
+        'index', 'table', 'summary', 'overview', 'introduction',
     ]
     for start in bad_starts:
         if name_lower.startswith(start):
@@ -248,35 +265,49 @@ def is_valid_investor_name(name: str) -> bool:
     if re.match(r'^\(\d+\)', name) or re.match(r'^\*+', name):
         return False
     
+    # Skip if it ends with common section endings
+    bad_endings = ['statements', 'information', 'considerations', 'matters', 
+                   'disclosure', 'liability', 'liabilities']
+    for ending in bad_endings:
+        if name_lower.endswith(ending):
+            return False
+    
     # Valid investor names usually contain:
-    # - Person names (capitalized words)
+    # - Person names (capitalized words, 2-5 words)
     # - Entity names (LLC, LP, Inc, Corp, Fund, Capital, Partners, Trust, etc.)
     entity_indicators = [
-        'llc', 'llp', 'l.l.c', 'l.p.', 'lp', 'inc', 'corp', 'corporation',
+        'llc', 'llp', 'l.l.c', 'l.p.', ' lp', 'inc', 'corp', 'corporation',
         'fund', 'capital', 'partners', 'venture', 'trust', 'holdings',
         'management', 'advisors', 'investment', 'equity', 'group',
         'foundation', 'endowment', 'family', 'associates', 'asset',
-        'securities', 'limited', 'ltd', 'company', 'co.', 'gp',
+        'securities', 'limited', 'ltd', 'company', 'co.', ' gp',
     ]
     
     # Check if it looks like an entity
     has_entity_indicator = any(ind in name_lower for ind in entity_indicators)
     
-    # Check if it looks like a person name (2-4 capitalized words)
-    words = name.split()
-    capitalized_words = sum(1 for w in words if w and w[0].isupper())
-    looks_like_person = 2 <= len(words) <= 6 and capitalized_words >= 2
+    # Check if it looks like a person name (2-5 capitalized words, not all caps)
+    capitalized_words = sum(1 for w in words if w and w[0].isupper() and not w.isupper())
+    looks_like_person = 2 <= len(words) <= 5 and capitalized_words >= 2 and name != name_upper
     
     # Check if it has credentials (Ph.D., M.D., M.B.A., etc.) - indicates a person
     has_credentials = bool(re.search(r'\b(Ph\.?D|M\.?D|M\.?B\.?A|J\.?D|CPA|CFA)\b', name, re.I))
+    
+    # If it has ownership percentage embedded, probably valid
+    if re.search(r'\d+\.?\d*%', name):
+        # But make sure it's not just a percentage phrase
+        if has_entity_indicator or looks_like_person or has_credentials:
+            return True
     
     # Must look like either an entity or a person
     if has_entity_indicator or looks_like_person or has_credentials:
         return True
     
-    # If it has ownership percentage in the name, probably valid
-    if re.search(r'\d+\.?\d*%', name):
-        return True
+    # Last resort: if short (2-3 words) and has a capitalized structure, might be a name
+    if len(words) >= 2 and len(words) <= 4:
+        # Check if it looks like "First Last" pattern
+        if all(w[0].isupper() for w in words if w):
+            return True
     
     return False
 
