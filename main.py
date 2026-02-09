@@ -45,6 +45,8 @@ def classify_entity(name: str) -> str:
 
 def generate_linkedin_search_url(name: str) -> str:
     """Generate a LinkedIn search URL for the entity."""
+    # Basic search URL - will work without Sales Navigator
+    # For Sales Nav, user can modify the base URL
     encoded_name = name.replace(' ', '%20')
     return f"https://www.linkedin.com/search/results/companies/?keywords={encoded_name}"
 
@@ -54,25 +56,14 @@ def main():
     
     # Configuration
     days_back = int(os.getenv('DAYS_BACK', 7))
-    output_method = os.getenv('OUTPUT_METHOD', 'csv')
+    output_method = os.getenv('OUTPUT_METHOD', 'csv')  # 'csv' or 'sheets'
     
-    # Initialize Affinity client - hardcoded key for testing
-    affinity_api_key = "jl3V-JfpGnQPj51Ae6R9SfoUK2aj-N8EvD20QAkeEIA"
-    logger.info(f"AFFINITY_API_KEY length: {len(affinity_api_key)}")
-    
-    if not affinity_api_key:
-        logger.warning("No Affinity API key found - CRM matching will be skipped")
-        affinity = None
-    else:
-        logger.info("Initializing Affinity client...")
-        try:
-            affinity = AffinityClient(affinity_api_key)
-            list_name = os.getenv('AFFINITY_LIST_NAME', 'Fundraising')
-            logger.info(f"Loading Affinity list: {list_name}")
-            affinity.load_fundraising_list(list_name)
-        except Exception as e:
-            logger.error(f"Failed to initialize Affinity client: {e}")
-            affinity = None
+    # Initialize Affinity client - TEMPORARILY DISABLED
+    # The Affinity API is returning many errors during list loading
+    # TODO: Fix Affinity integration later
+    affinity_api_key = None  # os.getenv('AFFINITY_API_KEY')
+    logger.info("Affinity CRM matching DISABLED for this run")
+    affinity = None
     
     # Step 1: Get recent S-1 filings
     logger.info(f"Fetching S-1 filings from the last {days_back} days")
@@ -124,17 +115,6 @@ def main():
                 investor['crm_status'] = match.get('status', '')
                 investor['crm_last_activity'] = match.get('last_activity', '')
                 investor['crm_notes'] = match.get('notes', '')
-    
-    # ============================================
-    # PRINT FULL INVESTOR LIST TO LOGS
-    # ============================================
-    logger.info("=" * 60)
-    logger.info("FULL INVESTOR LIST")
-    logger.info("=" * 60)
-    for i, inv in enumerate(all_investors, 1):
-        pct = f" ({inv['ownership_pct']}%)" if inv['ownership_pct'] else ""
-        logger.info(f"{i}. {inv['investor_name']}{pct} | {inv['company_ipo']} | {inv['entity_type']}")
-    logger.info("=" * 60)
     
     # Step 5: Output results
     timestamp = datetime.now().strftime('%Y-%m-%d')
