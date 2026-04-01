@@ -48,16 +48,18 @@ def get_recent_s1_filings(days_back: int = 7) -> List[Dict]:
 
 
 def _fetch_via_efts(start_str: str, end_str: str) -> List[Dict]:
-    """Query the EFTS search API with a date range."""
+    """
+    Query the EDGAR EFTS full-text search API with a date range.
+    Uses the efts.sec.gov endpoint with q, dateRange, startdt, enddt, and forms params.
+    """
     filings = []
     try:
         params = {
-            'forms': 'S-1,S-1/A',
+            'q': '""',
             'dateRange': 'custom',
             'startdt': start_str,
             'enddt': end_str,
-            'hits.hits.total.value': 1,
-            'hits.hits._source.period_of_report': 1,
+            'forms': 'S-1,S-1/A',
         }
         response = requests.get(EFTS_SEARCH_URL, params=params, headers=SEC_HEADERS, timeout=30)
         response.raise_for_status()
@@ -218,17 +220,31 @@ def get_s1_document_url(cik: str, cik_padded: str, accession_clean: str) -> Opti
 
         items = index_data.get('directory', {}).get('item', [])
 
-        # Prefer a file whose name contains 's-1' or 'prospectus'
-        for item in items:
+        # Patterns indicating an exhibit or ancillary file, not the main prospectus.
+        # ex_xxx, dex_xxx, R1.htm (XBRL fragments) are common exhibit patterns.
+        EXHIBIT_RE = re.compile(r'(^ex[_\-]|^dex|[_\-]ex\d|^r\d+\.htm$)', re.I)
+
+        def is_exhibit(fname):
+            return bool(EXHIBIT_RE.search(fname.lower()))
+
+        htm_items = [i for i in items if i.get('name', '').lower().endswith('.htm')]
+
+        # Pass 1: name clearly signals it's the main S-1
+        for item in htm_items:
             name = item.get('name', '').lower()
-            if name.endswith('.htm') and ('s-1' in name or 'prospectus' in name):
+            if not is_exhibit(name) and any(k in name for k in ('s-1', 's1', 'prospectus')):
                 return f'{EDGAR_ARCHIVES_URL}/{cik}/{accession_clean}/{item["name"]}'
 
-        # Fallback: first .htm file
-        for item in items:
-            if item.get('name', '').endswith('.htm'):
-                return f'{EDGAR_ARCHIVES_URL}/{cik}/{accession_clean}/{item["name"]}'
+        # Pass 2: largest non-exhibit .htm file (main prospectus is always the biggest)
+        non_exhibit = [i for i in htm_items if not is_exhibit(i.get('name', ''))]
+        if non_exhibit:
+            biggest = max(non_exhibit, key=lambda i: int(i.get('size', 0) or 0))
+            return f'{EDGAR_ARCHIVES_URL}/{cik}/{accession_clean}/{biggest["name"]}'
 
+        # Pass 3: absolute fallback, largest htm regardless
+        if htm_items:
+            biggest = max(htm_items, key=lambda i: int(i.get('size', 0) or 0))
+            return f'{EDGAR_ARCHIVES_URL}/{cik}/{accession_clean}/{biggest["name"]}'
     except requests.RequestException as e:
         logger.error(f'Error fetching index for {cik}/{accession_clean}: {e}')
 
@@ -281,7 +297,8 @@ def is_valid_investor_name(name: str) -> bool:
         return False
 
     words = name.split()
-    if name == name_upper and len(words) > 4:
+    # All-caps strings of 3+ words are section headers, not investor names
+    if name == name_upper and len(words) >= 3:
         return False
 
     exact_rejects = [
@@ -333,10 +350,11 @@ def is_valid_investor_name(name: str) -> bool:
     bad_starts = [
         'name', 'total', '(', '_', '*', '-', '\u2014', 'note', 'see ',
         'the ', 'our ', 'we ', 'an ', 'a ', 'all executive', 'all directors',
-        'all director', 'officers and directors as a group',
+        'all director', 'all officer', 'officers and directors as a group',
         'executive officers and directors',
         'directors and executive officers as a group',
         'selling shareholders', 'other 5%', 'other shareholders',
+        'before offering', 'after offering', 'determination of',
         'item', 'part', 'section', 'article', 'exhibit', 'schedule',
         'index', 'table', 'summary', 'overview', 'introduction',
         'directors and', 'executive officers',
