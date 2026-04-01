@@ -11,13 +11,15 @@ from typing import List, Dict
 
 logger = logging.getLogger(__name__)
 
-SLACK_BOT_TOKEN = os.getenv('SLACK_BOT_TOKEN', '')
 FUNDRAISING_BOT_CHANNEL = 'C0AQHP58A0Z'  # #fundraising-bot
 
 
 def _post_to_slack(channel_id: str, message: str) -> bool:
     """Post a message to Slack via the Web API."""
-    if not SLACK_BOT_TOKEN:
+    # Read token at call time, not module load time, so Railway env vars are present
+    token = os.getenv('SLACK_BOT_TOKEN', '').strip()
+    logger.info(f'SLACK_BOT_TOKEN present: {bool(token)} length: {len(token)}')
+    if not token:
         logger.warning('SLACK_BOT_TOKEN not set. Skipping Slack notification.')
         return False
 
@@ -25,7 +27,7 @@ def _post_to_slack(channel_id: str, message: str) -> bool:
         r = requests.post(
             'https://slack.com/api/chat.postMessage',
             headers={
-                'Authorization': f'Bearer {SLACK_BOT_TOKEN}',
+                'Authorization': f'Bearer {token}',
                 'Content-Type': 'application/json',
             },
             json={
