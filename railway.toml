@@ -2,7 +2,7 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "echo 'Bots run on cron schedule only'"
+startCommand = "python run_followup_bot.py"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
 
